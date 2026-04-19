@@ -36,19 +36,24 @@ int main(){
       SDL_Log("event: %d\n", e.type);
 
       if(e.type == SDL_QUIT){
-        SDL_Log("Exit calendar\n");
         state.running = false;
         break;
+      }else if(e.type == SDL_KEYDOWN){
+        if(e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q){
+          state.running = false;
+          break;
+        }
       }
     }
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
     SDL_RenderClear(renderer);
     SDL_RenderPresent(renderer);
 
     SDL_Delay(100);
   }
 
+  SDL_Log("Exit calendar\n");
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(win);
   SDL_Quit();
