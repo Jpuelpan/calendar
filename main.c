@@ -33,7 +33,7 @@ bool LoadFont(void *buff, char *fontName, size_t buffSize) {
   }
 
   if (fontName == NULL || strlen(fontName) == 0) {
-    fontName = "Mono:style=Bold";
+    fontName = "Mono:style=Regular";
   }
 
   FcResult result;
@@ -78,9 +78,9 @@ int LoadTextures(SDL_Renderer *renderer) {
     return 1;
   }
 
-  for (int i = 0; i < 31; i++) {
+  for (int i = 1; i <= 31; i++) {
     char content[10];
-    sprintf(content, "%0d", i);
+    sprintf(content, "%02d", i);
 
     SDL_Surface *text = TTF_RenderText_Blended(font, content, fgColor);
     if (!text) {
@@ -118,9 +118,32 @@ void RenderDays(AppState *state) {
   float blockWidth = (float)state->w / 7.0f;
   float blockHeight = (float)state->h / 5.0f;
 
-  SDL_Rect r = {.x = 0, .y = 0, .w = blockWidth, .h = blockHeight};
+  float boxWidth = blockWidth / 2.0f;
+  float boxHeight = blockHeight - blockHeight / 2;
 
-  SDL_RenderCopy(state->renderer, textures[10], NULL, &r);
+  SDL_Rect r = {.x = 0, .y = boxHeight / 2, .w = boxWidth, .h = boxHeight};
+  int day = 1;
+
+  for (int i = 0; i < 7; i++) {
+    r.x = boxWidth / 2;
+    if (i > 0) {
+      r.y = r.y + boxHeight * 2;
+    }
+
+    for (int j = 0; j < 7; j++) {
+      if (day > 31) {
+        return;
+      }
+
+      SDL_Log("Day: %d\n", day);
+      if (j > 0) {
+        r.x = r.x + boxWidth * 2;
+      }
+
+      SDL_RenderCopy(state->renderer, textures[day], NULL, &r);
+      day++;
+    }
+  }
 }
 
 int main() {
