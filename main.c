@@ -6,7 +6,9 @@
 
 SDL_Color bgColor = {.r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE};
 SDL_Color fgColor = {.r = 255, .g = 255, .b = 255, .a = SDL_ALPHA_OPAQUE};
-SDL_Texture *textures[31];
+SDL_Texture *numberTextures[31];
+SDL_Texture *weekdaysTextures[7];
+const char *weekdays[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
 
 typedef struct {
   bool running;
@@ -88,7 +90,18 @@ int LoadTextures(SDL_Renderer *renderer) {
       return 1;
     }
 
-    textures[i] = SDL_CreateTextureFromSurface(renderer, text);
+    numberTextures[i] = SDL_CreateTextureFromSurface(renderer, text);
+    SDL_FreeSurface(text);
+  }
+
+  for (int i = 0; i < (int)(sizeof(weekdays) / sizeof(weekdays[0])); i++) {
+    SDL_Surface *text = TTF_RenderText_Blended(font, weekdays[i], fgColor);
+    if (!text) {
+      SDL_Log("Failed to texturize weekday: %s\n", TTF_GetError());
+      return 1;
+    }
+
+    weekdaysTextures[i] = SDL_CreateTextureFromSurface(renderer, text);
     SDL_FreeSurface(text);
   }
 
@@ -99,15 +112,16 @@ void RenderGrid(AppState *state) {
   float blockWidth = (float)state->w / 7.0f;
   float blockHeight = (float)state->h / 5.0f;
 
-  /* SDL_RenderSetScale(app->renderer, 2.0f, 2.0f); */
   SDL_SetRenderDrawColor(state->renderer, fgColor.r, fgColor.g, fgColor.b,
                          fgColor.a);
 
+  // Render vertical lines
   for (int i = 0; i <= 7; i++) {
     int offsetX = (int)blockWidth * i + 1;
     SDL_RenderDrawLine(state->renderer, offsetX, 0, offsetX, state->h);
   }
 
+  // Render horizontal lines
   for (int i = 0; i <= 5; i++) {
     int offsetY = (int)blockHeight * i + 1;
     SDL_RenderDrawLine(state->renderer, 0, offsetY, state->w, offsetY);
@@ -135,19 +149,18 @@ void RenderDays(AppState *state) {
         return;
       }
 
-      SDL_Log("Day: %d\n", day);
       if (j > 0) {
         r.x = r.x + boxWidth * 2;
       }
 
-      SDL_RenderCopy(state->renderer, textures[day], NULL, &r);
+      SDL_RenderCopy(state->renderer, numberTextures[day], NULL, &r);
       day++;
     }
   }
 }
 
 int main() {
-  printf("Initializing calendar\n");
+  SDL_Log("Initializing calendar\n");
 
   AppState state = {.running = true, .w = 600, .h = 600};
 
