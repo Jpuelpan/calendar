@@ -18,6 +18,15 @@ typedef struct {
   SDL_Window *window;
 } AppState;
 
+typedef struct {
+  SDL_Rect *bounds;
+  SDL_Renderer *renderer;
+} CalendarMonth;
+
+typedef struct {
+  SDL_Rect *bounds;
+} CalendarDay;
+
 void CloseApp(AppState *state) { state->running = false; }
 
 bool LoadFont(void *buff, char *fontName, size_t buffSize) {
@@ -74,7 +83,7 @@ int LoadTextures(SDL_Renderer *renderer) {
     return 1;
   }
 
-  TTF_Font *font = TTF_OpenFont(fontPath, 1000);
+  TTF_Font *font = TTF_OpenFont(fontPath, 100);
   if (font == NULL) {
     SDL_Log("Failed to open font: %s\n", TTF_GetError());
     return 1;
@@ -83,6 +92,10 @@ int LoadTextures(SDL_Renderer *renderer) {
   for (int i = 1; i <= 31; i++) {
     char content[10];
     sprintf(content, "%02d", i);
+
+    int fontW, fontH;
+    TTF_SizeText(font, content, &fontW, &fontH);
+    SDL_Log("text w: %d, h: %d\n", fontW, fontH);
 
     SDL_Surface *text = TTF_RenderText_Blended(font, content, fgColor);
     if (!text) {
@@ -110,7 +123,7 @@ int LoadTextures(SDL_Renderer *renderer) {
 
 void RenderGrid(AppState *state) {
   float blockWidth = (float)state->w / 7.0f;
-  float blockHeight = (float)state->h / 5.0f;
+  float blockHeight = (float)state->h / 6.0f;
 
   SDL_SetRenderDrawColor(state->renderer, fgColor.r, fgColor.g, fgColor.b,
                          fgColor.a);
@@ -122,15 +135,62 @@ void RenderGrid(AppState *state) {
   }
 
   // Render horizontal lines
-  for (int i = 0; i <= 5; i++) {
+  for (int i = 0; i <= 6; i++) {
     int offsetY = (int)blockHeight * i + 1;
     SDL_RenderDrawLine(state->renderer, 0, offsetY, state->w, offsetY);
   }
 }
 
-void RenderDays(AppState *state) {
-  float blockWidth = (float)state->w / 7.0f;
-  float blockHeight = (float)state->h / 5.0f;
+CalendarDay RenderCalendarDay(CalendarMonth *month, int day, int x, int y) {
+  SDL_Rect bounds = {
+      .x = month->bounds->x + x,
+      .y = month->bounds->y + y,
+      .w = month->bounds->w / 7,
+      .h = month->bounds->h / 5,
+  };
+
+  SDL_SetRenderDrawColor(month->renderer, fgColor.r, fgColor.g, fgColor.b,
+                         fgColor.a);
+  SDL_RenderDrawRect(month->renderer, &bounds);
+
+  int paddingX = bounds.w / 3;
+  int paddingY = bounds.h / 2;
+
+  SDL_Rect destRect = {
+      .x = bounds.x + paddingX / 2,
+      .y = bounds.y + paddingY / 2,
+      .w = bounds.w - paddingX,
+      .h = bounds.h - paddingY,
+  };
+
+  SDL_Rect srcRect = {
+      .x = 0,
+      .y = 0,
+      .w = 120,
+      .h = 65,
+  };
+
+  SDL_RenderCopy(month->renderer, numberTextures[day], &srcRect, &destRect);
+  /* SDL_RenderDrawRect(month->renderer, &destRect); */
+
+  CalendarDay d = {.bounds = &bounds};
+  return d;
+}
+
+CalendarMonth RenderMonth(SDL_Renderer *renderer, int x, int y, int w, int h) {
+  SDL_Rect bounds = {.x = x, .y = y, .w = w, .h = h};
+  CalendarMonth m = {.bounds = &bounds, .renderer = renderer};
+
+  SDL_SetRenderDrawColor(renderer, fgColor.r, fgColor.g, fgColor.b, fgColor.a);
+  SDL_RenderDrawRect(renderer, m.bounds);
+
+  RenderCalendarDay(&m, 31, 0, 0);
+  /* RenderCalendarDay(&m, 23, 200, 0); */
+
+  return m;
+
+  /* float blockWidth = w / 7.0f;
+  float blockHeight = h / 6.0f;
 
   float boxWidth = blockWidth / 2.0f;
   float boxHeight = blockHeight - blockHeight / 2;
@@ -138,7 +198,7 @@ void RenderDays(AppState *state) {
   SDL_Rect r = {.x = 0, .y = boxHeight / 2, .w = boxWidth, .h = boxHeight};
   int day = 1;
 
-  for (int i = 0; i < 7; i++) {
+  for (int i = 0; i < 6; i++) {
     r.x = boxWidth / 2;
     if (i > 0) {
       r.y = r.y + boxHeight * 2;
@@ -156,7 +216,7 @@ void RenderDays(AppState *state) {
       SDL_RenderCopy(state->renderer, numberTextures[day], NULL, &r);
       day++;
     }
-  }
+  } */
 }
 
 int main() {
@@ -213,8 +273,9 @@ int main() {
     SDL_RenderClear(state.renderer);
     SDL_GetWindowSize(state.window, &state.w, &state.h);
 
-    RenderGrid(&state);
-    RenderDays(&state);
+    /* RenderGrid(&state); */
+
+    RenderMonth(state.renderer, 50, 50, state.w - 100, state.h - 100);
 
     SDL_RenderPresent(state.renderer);
     SDL_Delay(10);
