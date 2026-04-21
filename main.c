@@ -7,7 +7,7 @@
 
 SDL_Color BG_COLOR = {.r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE};
 SDL_Color FG_COLOR = {.r = 255, .g = 255, .b = 255, .a = SDL_ALPHA_OPAQUE};
-const char *WEEKDAY_NAMES[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+const char *WEEKDAY_NAMES[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
 const char *MONTH_NAMES[] = {"January",   "February", "March",    "April",
                              "May",       "June",     "July",     "August",
                              "September", "October",  "November", "December"};
@@ -197,23 +197,48 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
   }
 
   // Render actual calendar
+  int offset = state->current_month->tm_wday;
   int day = 1;
   for (int i = 0; i < 5; i++) {
     for (int j = 0; j < 7; j++) {
-      if (day <= 31) {
-        SDL_Rect r = {
-            .x = root_rect->x + column_width * j,
-            .y =
-                root_rect->y + title_height + header_height + column_height * i,
-            .w = column_width,
-            .h = column_height,
-        };
+      SDL_Rect r = {
+          .x = root_rect->x + column_width * j,
+          .y = root_rect->y + title_height + header_height + column_height * i,
+          .w = column_width,
+          .h = column_height,
+      };
+      /* RenderBoundingBox(state->renderer, &r); */
+
+      if (i == 0 && j < offset) {
+        RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[0]);
+      } else if (day <= 31) {
         RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[day]);
-        /* RenderBoundingBox(state->renderer, &r); */
         day++;
       }
     }
   }
+}
+
+void UpdateMonth(AppState *state, int count) {
+  int next_month = state->current_month->tm_mon + count;
+  int next_year = state->current_month->tm_year;
+
+  if (next_month < 0) {
+    next_month = 11;
+    next_year = state->current_month->tm_year - 1;
+  } else if (next_month > 11) {
+    next_month = 0;
+    next_year = state->current_month->tm_year + 1;
+  }
+
+  state->current_month->tm_mon = next_month;
+  state->current_month->tm_year = next_year;
+
+  time_t new_time = mktime(state->current_month);
+  SDL_Log("current_month: %d - %d - %d [%d] | %ld\n",
+          state->current_month->tm_year + 1900, state->current_month->tm_mon,
+          state->current_month->tm_mday, state->current_month->tm_wday,
+          new_time);
 }
 
 int main(void) {
@@ -256,8 +281,7 @@ int main(void) {
     return 1;
   }
 
-  SDL_Log("current_month: %d - %d\n", state.current_month->tm_mon,
-          state.current_month->tm_year + 1900);
+  UpdateMonth(&state, 0);
 
   while (state.running) {
     SDL_Event e;
@@ -275,27 +299,11 @@ int main(void) {
           break;
         } else if (e.key.keysym.sym == SDLK_h ||
                    e.key.keysym.sym == SDLK_LEFT) {
-
-          int prev = state.current_month->tm_mon - 1;
-          if (prev < 0) {
-            state.current_month->tm_mon = 11;
-            state.current_month->tm_year = state.current_month->tm_year - 1;
-          } else {
-            state.current_month->tm_mon = prev;
-          }
+          UpdateMonth(&state, -1);
         } else if (e.key.keysym.sym == SDLK_l ||
                    e.key.keysym.sym == SDLK_RIGHT) {
-
-          int next = state.current_month->tm_mon + 1;
-          if (next > 11) {
-            state.current_month->tm_mon = 0;
-            state.current_month->tm_year = state.current_month->tm_year + 1;
-          } else {
-            state.current_month->tm_mon = next;
-          }
+          UpdateMonth(&state, 1);
         }
-        SDL_Log("current_month: %d - %d\n", state.current_month->tm_mon,
-                state.current_month->tm_year + 1900);
       }
     }
 
