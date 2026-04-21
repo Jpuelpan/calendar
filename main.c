@@ -1,14 +1,18 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_log.h>
 #include <SDL2/SDL_ttf.h>
 #include <fontconfig/fontconfig.h>
 #include <stdbool.h>
 #include <stdio.h>
 
-SDL_Color bgColor = {.r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE};
-SDL_Color fgColor = {.r = 255, .g = 255, .b = 255, .a = SDL_ALPHA_OPAQUE};
-SDL_Texture *numberTextures[31];
-SDL_Texture *weekdaysTextures[7];
-const char *weekdays[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+SDL_Color BG_COLOR = {.r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE};
+SDL_Color FG_COLOR = {.r = 255, .g = 255, .b = 255, .a = SDL_ALPHA_OPAQUE};
+const char *WEEKDAYS[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+
+int FONT_HEIGHT = 0;
+int FONT_DESCENT = 0;
+SDL_Texture *NUMBER_TEXTURES[31];
+SDL_Texture *WEEKDAYS_TEXTURES[7];
 
 typedef struct {
   bool running;
@@ -18,18 +22,29 @@ typedef struct {
   SDL_Window *window;
 } AppState;
 
-typedef struct {
-  SDL_Rect *bounds;
-  SDL_Renderer *renderer;
-} CalendarMonth;
+/* typedef struct { */
+/*   SDL_Rect bounds; */
+/*   struct BoundingBox *parent; */
+/* } BoundingBox; */
 
-typedef struct {
-  SDL_Rect *bounds;
-} CalendarDay;
+/* BoundingBox CreateBoundingBox(BoundingBox *parent, int x, int y, int w, int
+ * h) { */
+/*   BoundingBox box = { */
+/*       .bounds = {.x = x, .y = y, .w = w, .h = h}, */
+/*       /* .parent = parent, */ */
+    /*   }; */
+    /*   return box; */
+    /* } */
+
+    void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect) {
+  SDL_SetRenderDrawColor(renderer, FG_COLOR.r, FG_COLOR.g, FG_COLOR.b,
+                         FG_COLOR.a);
+  SDL_RenderDrawRect(renderer, rect);
+}
 
 void CloseApp(AppState *state) { state->running = false; }
 
-bool LoadFont(void *buff, char *fontName, size_t buffSize) {
+bool LoadFont(void *buff, char *font_name, size_t buff_size) {
   FcConfig *config = NULL;
 
   if (!FcInit()) {
@@ -43,22 +58,22 @@ bool LoadFont(void *buff, char *fontName, size_t buffSize) {
     return false;
   }
 
-  if (fontName == NULL || strlen(fontName) == 0) {
-    fontName = "Mono:style=Regular";
+  if (font_name == NULL || strlen(font_name) == 0) {
+    font_name = "Mono:style=Regular";
   }
 
   FcResult result;
-  FcPattern *pat = FcNameParse((const FcChar8 *)fontName);
+  FcPattern *pat = FcNameParse((const FcChar8 *)font_name);
 
   FcConfigSubstitute(config, pat, FcMatchKindBegin);
   FcDefaultSubstitute(pat);
-  SDL_Log("Looking for font: %s\n", fontName);
+  SDL_Log("Looking for font: %s\n", font_name);
 
   FcPattern *font = FcFontMatch(config, pat, &result);
   if (font) {
     FcChar8 *file = NULL;
     if (FcPatternGetString(font, FC_FILE, 0, &file) == FcResultMatch) {
-      memcpy(buff, file, buffSize);
+      memcpy(buff, file, buff_size);
     }
   }
 
@@ -72,8 +87,8 @@ bool LoadFont(void *buff, char *fontName, size_t buffSize) {
 }
 
 int LoadTextures(SDL_Renderer *renderer) {
-  char fontPath[500];
-  if (!LoadFont(&fontPath, NULL, sizeof(fontPath))) {
+  char font_path[500];
+  if (!LoadFont(&font_path, NULL, sizeof(font_path))) {
     SDL_Log("Failed to load font\n");
     return 1;
   }
@@ -83,143 +98,106 @@ int LoadTextures(SDL_Renderer *renderer) {
     return 1;
   }
 
-  TTF_Font *font = TTF_OpenFont(fontPath, 100);
+  TTF_Font *font = TTF_OpenFont(font_path, 100);
   if (font == NULL) {
     SDL_Log("Failed to open font: %s\n", TTF_GetError());
     return 1;
   }
+  FONT_DESCENT = TTF_FontDescent(font);
+  FONT_HEIGHT = TTF_FontHeight(font);
 
   for (int i = 1; i <= 31; i++) {
     char content[10];
     sprintf(content, "%02d", i);
 
-    int fontW, fontH;
-    TTF_SizeText(font, content, &fontW, &fontH);
-    SDL_Log("text w: %d, h: %d\n", fontW, fontH);
-
-    SDL_Surface *text = TTF_RenderText_Blended(font, content, fgColor);
+    SDL_Surface *text = TTF_RenderText_Blended(font, content, FG_COLOR);
     if (!text) {
       SDL_Log("Failed to texturize number: %s\n", TTF_GetError());
       return 1;
     }
 
-    numberTextures[i] = SDL_CreateTextureFromSurface(renderer, text);
+    NUMBER_TEXTURES[i] = SDL_CreateTextureFromSurface(renderer, text);
     SDL_FreeSurface(text);
   }
 
-  for (int i = 0; i < (int)(sizeof(weekdays) / sizeof(weekdays[0])); i++) {
-    SDL_Surface *text = TTF_RenderText_Blended(font, weekdays[i], fgColor);
+  for (int i = 0; i < (int)(sizeof(WEEKDAYS) / sizeof(WEEKDAYS[0])); i++) {
+    SDL_Surface *text = TTF_RenderText_Blended(font, WEEKDAYS[i], FG_COLOR);
     if (!text) {
       SDL_Log("Failed to texturize weekday: %s\n", TTF_GetError());
       return 1;
     }
 
-    weekdaysTextures[i] = SDL_CreateTextureFromSurface(renderer, text);
+    WEEKDAYS_TEXTURES[i] = SDL_CreateTextureFromSurface(renderer, text);
     SDL_FreeSurface(text);
   }
 
   return 0;
 }
 
-void RenderGrid(AppState *state) {
-  float blockWidth = (float)state->w / 7.0f;
-  float blockHeight = (float)state->h / 6.0f;
-
-  SDL_SetRenderDrawColor(state->renderer, fgColor.r, fgColor.g, fgColor.b,
-                         fgColor.a);
-
-  // Render vertical lines
-  for (int i = 0; i <= 7; i++) {
-    int offsetX = (int)blockWidth * i + 1;
-    SDL_RenderDrawLine(state->renderer, offsetX, 0, offsetX, state->h);
-  }
-
-  // Render horizontal lines
-  for (int i = 0; i <= 6; i++) {
-    int offsetY = (int)blockHeight * i + 1;
-    SDL_RenderDrawLine(state->renderer, 0, offsetY, state->w, offsetY);
-  }
-}
-
-CalendarDay RenderCalendarDay(CalendarMonth *month, int day, int x, int y) {
-  SDL_Rect bounds = {
-      .x = month->bounds->x + x,
-      .y = month->bounds->y + y,
-      .w = month->bounds->w / 7,
-      .h = month->bounds->h / 5,
+void RenderCalendarDay(SDL_Renderer *renderer, int day, int x, int y, int w,
+                       int h) {
+  SDL_Rect root = {
+      .x = x,
+      .y = y,
+      .w = w,
+      .h = h,
   };
 
-  SDL_SetRenderDrawColor(month->renderer, fgColor.r, fgColor.g, fgColor.b,
-                         fgColor.a);
-  SDL_RenderDrawRect(month->renderer, &bounds);
-
-  int paddingX = bounds.w / 3;
-  int paddingY = bounds.h / 2;
+  int padding_x = root.w / 3;
+  int padding_y = root.h / 2;
 
   SDL_Rect destRect = {
-      .x = bounds.x + paddingX / 2,
-      .y = bounds.y + paddingY / 2,
-      .w = bounds.w - paddingX,
-      .h = bounds.h - paddingY,
+      .x = box.bounds.x + padding_x / 2,
+      .y = box.bounds.y + padding_y / 2,
+      .w = box.bounds.w - padding_x,
+      .h = box.bounds.h - padding_y,
   };
 
   SDL_Rect srcRect = {
       .x = 0,
       .y = 0,
       .w = 120,
-      .h = 65,
+      .h = FONT_HEIGHT + FONT_DESCENT + 3,
   };
 
-  SDL_RenderCopy(month->renderer, numberTextures[day], &srcRect, &destRect);
-  /* SDL_RenderDrawRect(month->renderer, &destRect); */
-
-  CalendarDay d = {.bounds = &bounds};
-  return d;
+  SDL_RenderCopy(root->renderer, NUMBER_TEXTURES[day], &srcRect, &destRect);
+  RenderBoundingBox(box);
 }
 
-CalendarMonth RenderMonth(SDL_Renderer *renderer, int x, int y, int w, int h) {
-  SDL_Rect bounds = {.x = x, .y = y, .w = w, .h = h};
-  CalendarMonth m = {.bounds = &bounds, .renderer = renderer};
+void RenderMonth(SDL_Renderer *renderer, int x, int y, int w, int h) {
+  int header_height = h / 10;
+  int column_width = w / 7;
+  int column_height = h / 5;
 
-  SDL_SetRenderDrawColor(renderer, fgColor.r, fgColor.g, fgColor.b, fgColor.a);
-  SDL_RenderDrawRect(renderer, m.bounds);
+  BoundingBox root_box = CreateBoundingBox(renderer, x, y, w, h);
+  /* BoundingBox header_box = CreateBoundingBox(renderer, x, y, w,
+   * header_height); */
+  /* RenderBoundingBox(header_box); */
 
-  RenderCalendarDay(&m, 31, 0, 0);
-  /* RenderCalendarDay(&m, 23, 200, 0); */
+  for (size_t i = 0; i < sizeof(WEEKDAYS) / sizeof(WEEKDAYS[0]); i++) {
+    BoundingBox b = CreateBoundingBox(renderer, x + column_width * i, y + 0,
+                                      column_width, header_height);
+    SDL_RenderCopy(renderer, WEEKDAYS_TEXTURES[i], NULL, &b.bounds);
+    RenderBoundingBox(b);
+  }
 
-  return m;
+  BoundingBox numbers_box = CreateBoundingBox(
+      renderer, root_box.bounds.x, root_box.bounds.y + header_height,
+      root_box.bounds.w, root_box.bounds.h - header_height);
 
-  /* float blockWidth = w / 7.0f;
-  float blockHeight = h / 6.0f;
-
-  float boxWidth = blockWidth / 2.0f;
-  float boxHeight = blockHeight - blockHeight / 2;
-
-  SDL_Rect r = {.x = 0, .y = boxHeight / 2, .w = boxWidth, .h = boxHeight};
   int day = 1;
-
-  for (int i = 0; i < 6; i++) {
-    r.x = boxWidth / 2;
-    if (i > 0) {
-      r.y = r.y + boxHeight * 2;
-    }
-
+  for (int i = 0; i < 5; i++) {
     for (int j = 0; j < 7; j++) {
-      if (day > 31) {
-        return;
+      if (day <= 31) {
+        RenderCalendarDay(renderer, day, column_width * j, column_height * i,
+                          column_width, column_height);
+        day++;
       }
-
-      if (j > 0) {
-        r.x = r.x + boxWidth * 2;
-      }
-
-      SDL_RenderCopy(state->renderer, numberTextures[day], NULL, &r);
-      day++;
     }
-  } */
+  }
 }
 
-int main() {
+int main(void) {
   SDL_Log("Initializing calendar\n");
 
   AppState state = {.running = true, .w = 600, .h = 600};
@@ -268,12 +246,10 @@ int main() {
     }
 
     SDL_RenderSetScale(state.renderer, 1.0f, 1.0f);
-    SDL_SetRenderDrawColor(state.renderer, bgColor.r, bgColor.g, bgColor.b,
-                           bgColor.a);
+    SDL_SetRenderDrawColor(state.renderer, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b,
+                           BG_COLOR.a);
     SDL_RenderClear(state.renderer);
     SDL_GetWindowSize(state.window, &state.w, &state.h);
-
-    /* RenderGrid(&state); */
 
     RenderMonth(state.renderer, 50, 50, state.w - 100, state.h - 100);
 

@@ -1,0 +1,29 @@
+[
+  {
+    "file": "main.c",
+    "arguments": [
+      "/usr/bin/gcc",
+      "-o",
+      "calendar",
+      "main.c",
+      "-I/usr/include/SDL2",
+      "-D_GNU_SOURCE=1",
+      "-D_REENTRANT",
+      "-I/usr/include/harfbuzz",
+      "-I/usr/include/glib-2.0",
+      "-I/usr/lib/glib-2.0/include",
+      "-I/usr/include/sysprof-6",
+      "-pthread",
+      "-I/usr/include/freetype2",
+      "-I/usr/include/libpng16",
+      "-DWITH_GZFILEOP",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-std=c99",
+      "-g"
+    ],
+    "directory": "/home/juan/projects/personal/calendar",
+    "output": "calendar"
+  }
+]
