@@ -1,5 +1,4 @@
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_log.h>
 #include <SDL2/SDL_ttf.h>
 #include <fontconfig/fontconfig.h>
 #include <stdbool.h>
@@ -21,26 +20,6 @@ typedef struct {
   SDL_Renderer *renderer;
   SDL_Window *window;
 } AppState;
-
-/* typedef struct { */
-/*   SDL_Rect bounds; */
-/*   struct BoundingBox *parent; */
-/* } BoundingBox; */
-
-/* BoundingBox CreateBoundingBox(BoundingBox *parent, int x, int y, int w, int
- * h) { */
-/*   BoundingBox box = { */
-/*       .bounds = {.x = x, .y = y, .w = w, .h = h}, */
-/*       /* .parent = parent, */ */
-    /*   }; */
-    /*   return box; */
-    /* } */
-
-    void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect) {
-  SDL_SetRenderDrawColor(renderer, FG_COLOR.r, FG_COLOR.g, FG_COLOR.b,
-                         FG_COLOR.a);
-  SDL_RenderDrawRect(renderer, rect);
-}
 
 void CloseApp(AppState *state) { state->running = false; }
 
@@ -134,23 +113,22 @@ int LoadTextures(SDL_Renderer *renderer) {
   return 0;
 }
 
-void RenderCalendarDay(SDL_Renderer *renderer, int day, int x, int y, int w,
-                       int h) {
-  SDL_Rect root = {
-      .x = x,
-      .y = y,
-      .w = w,
-      .h = h,
-  };
+void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect) {
+  SDL_SetRenderDrawColor(renderer, FG_COLOR.r, FG_COLOR.g, FG_COLOR.b,
+                         FG_COLOR.a);
+  SDL_RenderDrawRect(renderer, rect);
+}
 
-  int padding_x = root.w / 3;
-  int padding_y = root.h / 2;
+void RenderBoxContent(SDL_Renderer *renderer, SDL_Rect *rect,
+                      SDL_Texture *texture) {
+  int padding_x = rect->w / 3;
+  int padding_y = rect->h / 2;
 
   SDL_Rect destRect = {
-      .x = box.bounds.x + padding_x / 2,
-      .y = box.bounds.y + padding_y / 2,
-      .w = box.bounds.w - padding_x,
-      .h = box.bounds.h - padding_y,
+      .x = rect->x + padding_x / 2,
+      .y = rect->y + padding_y / 2,
+      .w = rect->w - padding_x,
+      .h = rect->h - padding_y,
   };
 
   SDL_Rect srcRect = {
@@ -160,37 +138,37 @@ void RenderCalendarDay(SDL_Renderer *renderer, int day, int x, int y, int w,
       .h = FONT_HEIGHT + FONT_DESCENT + 3,
   };
 
-  SDL_RenderCopy(root->renderer, NUMBER_TEXTURES[day], &srcRect, &destRect);
-  RenderBoundingBox(box);
+  SDL_RenderCopy(renderer, texture, &srcRect, &destRect);
 }
 
-void RenderMonth(SDL_Renderer *renderer, int x, int y, int w, int h) {
-  int header_height = h / 10;
-  int column_width = w / 7;
-  int column_height = h / 5;
-
-  BoundingBox root_box = CreateBoundingBox(renderer, x, y, w, h);
-  /* BoundingBox header_box = CreateBoundingBox(renderer, x, y, w,
-   * header_height); */
-  /* RenderBoundingBox(header_box); */
+void RenderMonth(SDL_Renderer *renderer, SDL_Rect *root_rect) {
+  int header_height = root_rect->h / 8;
+  int column_width = root_rect->w / 7;
+  int column_height = (root_rect->h - header_height) / 5;
 
   for (size_t i = 0; i < sizeof(WEEKDAYS) / sizeof(WEEKDAYS[0]); i++) {
-    BoundingBox b = CreateBoundingBox(renderer, x + column_width * i, y + 0,
-                                      column_width, header_height);
-    SDL_RenderCopy(renderer, WEEKDAYS_TEXTURES[i], NULL, &b.bounds);
-    RenderBoundingBox(b);
+    SDL_Rect r = {
+        .x = root_rect->x + column_width * i,
+        .y = root_rect->y,
+        .w = column_width,
+        .h = header_height,
+    };
+    RenderBoxContent(renderer, &r, WEEKDAYS_TEXTURES[i]);
+    RenderBoundingBox(renderer, &r);
   }
-
-  BoundingBox numbers_box = CreateBoundingBox(
-      renderer, root_box.bounds.x, root_box.bounds.y + header_height,
-      root_box.bounds.w, root_box.bounds.h - header_height);
 
   int day = 1;
   for (int i = 0; i < 5; i++) {
     for (int j = 0; j < 7; j++) {
       if (day <= 31) {
-        RenderCalendarDay(renderer, day, column_width * j, column_height * i,
-                          column_width, column_height);
+        SDL_Rect r = {
+            .x = root_rect->x + column_width * j,
+            .y = root_rect->y + header_height + column_height * i,
+            .w = column_width,
+            .h = column_height,
+        };
+        RenderBoxContent(renderer, &r, NUMBER_TEXTURES[day]);
+        RenderBoundingBox(renderer, &r);
         day++;
       }
     }
@@ -251,7 +229,8 @@ int main(void) {
     SDL_RenderClear(state.renderer);
     SDL_GetWindowSize(state.window, &state.w, &state.h);
 
-    RenderMonth(state.renderer, 50, 50, state.w - 100, state.h - 100);
+    SDL_Rect r = {.x = 50, .y = 50, .w = state.w - 100, .h = state.h - 100};
+    RenderMonth(state.renderer, &r);
 
     SDL_RenderPresent(state.renderer);
     SDL_Delay(10);
