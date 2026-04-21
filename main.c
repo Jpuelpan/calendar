@@ -3,22 +3,29 @@
 #include <fontconfig/fontconfig.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <time.h>
 
 SDL_Color BG_COLOR = {.r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE};
 SDL_Color FG_COLOR = {.r = 255, .g = 255, .b = 255, .a = SDL_ALPHA_OPAQUE};
-const char *WEEKDAYS[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+const char *WEEKDAY_NAMES[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+const char *MONTH_NAMES[] = {"January",   "February", "March",    "April",
+                             "May",       "June",     "July",     "August",
+                             "September", "October",  "November", "December"};
 
 int FONT_HEIGHT = 0;
 int FONT_DESCENT = 0;
 SDL_Texture *NUMBER_TEXTURES[31];
-SDL_Texture *WEEKDAYS_TEXTURES[7];
+SDL_Texture *WEEKDAY_TEXTURES[7];
+SDL_Texture *MONTH_TEXTURES[12];
 
 typedef struct {
-  bool running;
-  int w;
-  int h;
+  struct tm *today;
+  struct tm *current_month;
   SDL_Renderer *renderer;
   SDL_Window *window;
+  int w;
+  int h;
+  bool running;
 } AppState;
 
 void CloseApp(AppState *state) { state->running = false; }
@@ -99,14 +106,28 @@ int LoadTextures(SDL_Renderer *renderer) {
     SDL_FreeSurface(text);
   }
 
-  for (int i = 0; i < (int)(sizeof(WEEKDAYS) / sizeof(WEEKDAYS[0])); i++) {
-    SDL_Surface *text = TTF_RenderText_Blended(font, WEEKDAYS[i], FG_COLOR);
+  for (int i = 0; i < (int)(sizeof(WEEKDAY_NAMES) / sizeof(WEEKDAY_NAMES[0]));
+       i++) {
+    SDL_Surface *text =
+        TTF_RenderText_Blended(font, WEEKDAY_NAMES[i], FG_COLOR);
     if (!text) {
       SDL_Log("Failed to texturize weekday: %s\n", TTF_GetError());
       return 1;
     }
 
-    WEEKDAYS_TEXTURES[i] = SDL_CreateTextureFromSurface(renderer, text);
+    WEEKDAY_TEXTURES[i] = SDL_CreateTextureFromSurface(renderer, text);
+    SDL_FreeSurface(text);
+  }
+
+  for (int i = 0; i < (int)(sizeof(MONTH_TEXTURES) / sizeof(MONTH_TEXTURES[0]));
+       i++) {
+    SDL_Surface *text = TTF_RenderText_Blended(font, MONTH_NAMES[i], FG_COLOR);
+    if (!text) {
+      SDL_Log("Failed to texturize month name: %s\n", TTF_GetError());
+      return 1;
+    }
+
+    MONTH_TEXTURES[i] = SDL_CreateTextureFromSurface(renderer, text);
     SDL_FreeSurface(text);
   }
 
@@ -119,7 +140,7 @@ void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect) {
   SDL_RenderDrawRect(renderer, rect);
 }
 
-void RenderBoxContent(SDL_Renderer *renderer, SDL_Rect *rect,
+void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
                       SDL_Texture *texture) {
   int padding_x = rect->w / 3;
   int padding_y = rect->h / 2;
@@ -131,44 +152,64 @@ void RenderBoxContent(SDL_Renderer *renderer, SDL_Rect *rect,
       .h = rect->h - padding_y,
   };
 
+  int texture_width = 0;
+  SDL_QueryTexture(texture, NULL, NULL, &texture_width, NULL);
+
   SDL_Rect srcRect = {
       .x = 0,
       .y = 0,
-      .w = 120,
+      .w = texture_width,
       .h = FONT_HEIGHT + FONT_DESCENT + 3,
   };
 
   SDL_RenderCopy(renderer, texture, &srcRect, &destRect);
 }
 
-void RenderMonth(SDL_Renderer *renderer, SDL_Rect *root_rect) {
-  int header_height = root_rect->h / 8;
+void RenderMonth(AppState *state, SDL_Rect *root_rect) {
+  int title_height = root_rect->h / 8;
+  int header_height = root_rect->h / 9;
   int column_width = root_rect->w / 7;
-  int column_height = (root_rect->h - header_height) / 5;
+  int column_height = (root_rect->h - title_height - header_height) / 5;
 
-  for (size_t i = 0; i < sizeof(WEEKDAYS) / sizeof(WEEKDAYS[0]); i++) {
+  // Render title with month name
+  SDL_Rect title_rect = {
+      .x = root_rect->x,
+      .y = root_rect->y,
+      .w = root_rect->w,
+      .h = title_height,
+  };
+
+  RenderBoxTexture(state->renderer, &title_rect,
+                   MONTH_TEXTURES[state->current_month->tm_mon]);
+  /* RenderBoundingBox(state->renderer, &title_rect); */
+
+  // Render header with week day names
+  for (size_t i = 0; i < sizeof(WEEKDAY_NAMES) / sizeof(WEEKDAY_NAMES[0]);
+       i++) {
     SDL_Rect r = {
         .x = root_rect->x + column_width * i,
-        .y = root_rect->y,
+        .y = root_rect->y + title_height,
         .w = column_width,
         .h = header_height,
     };
-    RenderBoxContent(renderer, &r, WEEKDAYS_TEXTURES[i]);
-    RenderBoundingBox(renderer, &r);
+    RenderBoxTexture(state->renderer, &r, WEEKDAY_TEXTURES[i]);
+    /* RenderBoundingBox(state->renderer, &r); */
   }
 
+  // Render actual calendar
   int day = 1;
   for (int i = 0; i < 5; i++) {
     for (int j = 0; j < 7; j++) {
       if (day <= 31) {
         SDL_Rect r = {
             .x = root_rect->x + column_width * j,
-            .y = root_rect->y + header_height + column_height * i,
+            .y =
+                root_rect->y + title_height + header_height + column_height * i,
             .w = column_width,
             .h = column_height,
         };
-        RenderBoxContent(renderer, &r, NUMBER_TEXTURES[day]);
-        RenderBoundingBox(renderer, &r);
+        RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[day]);
+        /* RenderBoundingBox(state->renderer, &r); */
         day++;
       }
     }
@@ -177,8 +218,18 @@ void RenderMonth(SDL_Renderer *renderer, SDL_Rect *root_rect) {
 
 int main(void) {
   SDL_Log("Initializing calendar\n");
+  time_t now = time(NULL);
+  struct tm *today = localtime(&now);
+  struct tm *current_month = localtime(&now);
+  current_month->tm_mday = 1;
 
-  AppState state = {.running = true, .w = 600, .h = 600};
+  AppState state = {
+      .running = true,
+      .today = today,
+      .current_month = current_month,
+      .w = 600,
+      .h = 600,
+  };
 
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     SDL_Log("Failed to initialize SDL: %s\n", SDL_GetError());
@@ -205,6 +256,9 @@ int main(void) {
     return 1;
   }
 
+  SDL_Log("current_month: %d - %d\n", state.current_month->tm_mon,
+          state.current_month->tm_year + 1900);
+
   while (state.running) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -219,7 +273,29 @@ int main(void) {
         if (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q) {
           CloseApp(&state);
           break;
+        } else if (e.key.keysym.sym == SDLK_h ||
+                   e.key.keysym.sym == SDLK_LEFT) {
+
+          int prev = state.current_month->tm_mon - 1;
+          if (prev < 0) {
+            state.current_month->tm_mon = 11;
+            state.current_month->tm_year = state.current_month->tm_year - 1;
+          } else {
+            state.current_month->tm_mon = prev;
+          }
+        } else if (e.key.keysym.sym == SDLK_l ||
+                   e.key.keysym.sym == SDLK_RIGHT) {
+
+          int next = state.current_month->tm_mon + 1;
+          if (next > 11) {
+            state.current_month->tm_mon = 0;
+            state.current_month->tm_year = state.current_month->tm_year + 1;
+          } else {
+            state.current_month->tm_mon = next;
+          }
         }
+        SDL_Log("current_month: %d - %d\n", state.current_month->tm_mon,
+                state.current_month->tm_year + 1900);
       }
     }
 
@@ -229,8 +305,13 @@ int main(void) {
     SDL_RenderClear(state.renderer);
     SDL_GetWindowSize(state.window, &state.w, &state.h);
 
-    SDL_Rect r = {.x = 50, .y = 50, .w = state.w - 100, .h = state.h - 100};
-    RenderMonth(state.renderer, &r);
+    SDL_Rect r = {
+        .x = 50,
+        .y = 50,
+        .w = state.w - 100,
+        .h = state.h - 100,
+    };
+    RenderMonth(&state, &r);
 
     SDL_RenderPresent(state.renderer);
     SDL_Delay(10);
