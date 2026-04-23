@@ -7,7 +7,7 @@
 
 SDL_Color BG_COLOR = {.r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE};
 SDL_Color FG_COLOR = {.r = 255, .g = 255, .b = 255, .a = SDL_ALPHA_OPAQUE};
-const char *WEEKDAY_NAMES[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
+const char *WEEKDAY_NAMES[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
 const char *MONTH_NAMES[] = {"January",   "February", "March",    "April",
                              "May",       "June",     "July",     "August",
                              "September", "October",  "November", "December"};
@@ -197,7 +197,9 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
   }
 
   // Render actual calendar
-  int offset = state->current_month->tm_wday;
+  int offset = state->current_month->tm_wday == 0
+                   ? 6
+                   : state->current_month->tm_wday - 1;
   int day = 1;
   for (int i = 0; i < 5; i++) {
     for (int j = 0; j < 7; j++) {
@@ -239,6 +241,7 @@ void UpdateMonth(AppState *state, int count) {
   state->current_month->tm_mon = next_month;
   state->current_month->tm_year = next_year;
   mktime(state->current_month);
+  LogDate("CURRENT_MONTH", state->current_month);
 }
 
 void SetMonthToday(AppState *state) {
