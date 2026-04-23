@@ -219,6 +219,11 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
   }
 }
 
+void LogDate(char *msg, struct tm *tm) {
+  SDL_Log("%s: %d - %d - %d [%d]\n", msg, tm->tm_year + 1900, tm->tm_mon,
+          tm->tm_mday, tm->tm_wday);
+}
+
 void UpdateMonth(AppState *state, int count) {
   int next_month = state->current_month->tm_mon + count;
   int next_year = state->current_month->tm_year;
@@ -233,28 +238,42 @@ void UpdateMonth(AppState *state, int count) {
 
   state->current_month->tm_mon = next_month;
   state->current_month->tm_year = next_year;
+  mktime(state->current_month);
+}
 
-  time_t new_time = mktime(state->current_month);
-  SDL_Log("current_month: %d - %d - %d [%d] | %ld\n",
-          state->current_month->tm_year + 1900, state->current_month->tm_mon,
-          state->current_month->tm_mday, state->current_month->tm_wday,
-          new_time);
+void SetMonthToday(AppState *state) {
+  state->current_month->tm_mon = state->today->tm_mon;
+  state->current_month->tm_mday = state->today->tm_mday;
+  state->current_month->tm_year = state->today->tm_year;
+
+  mktime(state->current_month);
+  mktime(state->today);
 }
 
 int main(void) {
   SDL_Log("Initializing calendar\n");
-  time_t now = time(NULL);
-  struct tm *today = localtime(&now);
-  struct tm *current_month = localtime(&now);
-  current_month->tm_mday = 1;
+  time_t today_timer = time(NULL);
+  time_t month_timer = time(NULL);
+  struct tm today_tm;
+  struct tm month_tm;
+
+  localtime_r(&today_timer, &today_tm);
+  localtime_r(&month_timer, &month_tm);
+
+  month_tm.tm_mday = 1;
+  month_tm.tm_sec = 0;
+  month_tm.tm_min = 0;
+  month_tm.tm_hour = 0;
 
   AppState state = {
       .running = true,
-      .today = today,
-      .current_month = current_month,
+      .today = &today_tm,
+      .current_month = &month_tm,
       .w = 600,
       .h = 600,
   };
+
+  UpdateMonth(&state, 0);
 
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     SDL_Log("Failed to initialize SDL: %s\n", SDL_GetError());
@@ -281,8 +300,6 @@ int main(void) {
     return 1;
   }
 
-  UpdateMonth(&state, 0);
-
   while (state.running) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -294,16 +311,31 @@ int main(void) {
         break;
 
       case SDL_KEYDOWN:
-        if (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_q) {
+
+        switch (e.key.keysym.sym) {
+        case SDLK_ESCAPE:
+        case SDLK_q:
           CloseApp(&state);
           break;
-        } else if (e.key.keysym.sym == SDLK_h ||
-                   e.key.keysym.sym == SDLK_LEFT) {
+
+        case SDLK_h:
+        case SDLK_k:
+        case SDLK_LEFT:
           UpdateMonth(&state, -1);
-        } else if (e.key.keysym.sym == SDLK_l ||
-                   e.key.keysym.sym == SDLK_RIGHT) {
+          break;
+
+        case SDLK_l:
+        case SDLK_j:
+        case SDLK_RIGHT:
           UpdateMonth(&state, 1);
+          break;
+
+        case SDLK_t:
+          SetMonthToday(&state);
+          break;
         }
+
+        break;
       }
     }
 
