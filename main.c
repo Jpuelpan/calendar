@@ -21,14 +21,15 @@ SDL_Texture *MONTH_TEXTURES[12];
 typedef struct {
   struct tm *today;
   struct tm *current_month;
+  int total_days;
+
+  bool is_running;
   SDL_Renderer *renderer;
-  SDL_Window *window;
   int w;
   int h;
-  bool running;
 } AppState;
 
-void CloseApp(AppState *state) { state->running = false; }
+void CloseApp(AppState *state) { state->is_running = false; }
 
 bool LoadFont(void *buff, char *font_name, size_t buff_size) {
   FcConfig *config = NULL;
@@ -169,7 +170,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
   int title_height = root_rect->h / 8;
   int header_height = root_rect->h / 9;
   int column_width = root_rect->w / 7;
-  int column_height = (root_rect->h - title_height - header_height) / 5;
+  int column_height = (root_rect->h - title_height - header_height) / 6;
 
   // Render title with month name
   SDL_Rect title_rect = {
@@ -201,7 +202,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
                    ? 6
                    : state->current_month->tm_wday - 1;
   int day = 1;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 7; j++) {
       SDL_Rect r = {
           .x = root_rect->x + column_width * j,
@@ -213,7 +214,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
 
       if (i == 0 && j < offset) {
         RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[0]);
-      } else if (day <= 31) {
+      } else if (day <= state->total_days) {
         RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[day]);
         day++;
       }
@@ -241,7 +242,23 @@ void UpdateMonth(AppState *state, int count) {
   state->current_month->tm_mon = next_month;
   state->current_month->tm_year = next_year;
   mktime(state->current_month);
-  LogDate("CURRENT_MONTH", state->current_month);
+
+  int year = state->current_month->tm_year;
+  int month = state->current_month->tm_mon + 1;
+
+  if (month == 2) {
+    state->total_days = 28;
+    if (year % 4 == 0) {
+      if (year % 100 != 0 || (year % 400) == 0) {
+        state->total_days++;
+      }
+    }
+  } else {
+    state->total_days = 30 + ((month + (month / 8)) % 2);
+  }
+
+  LogDate("TODAY", state->today);
+  LogDate("MONTH", state->current_month);
 }
 
 void SetMonthToday(AppState *state) {
@@ -269,7 +286,7 @@ int main(void) {
   month_tm.tm_hour = 0;
 
   AppState state = {
-      .running = true,
+      .is_running = true,
       .today = &today_tm,
       .current_month = &month_tm,
       .w = 600,
@@ -283,16 +300,15 @@ int main(void) {
     return 1;
   }
 
-  state.window = SDL_CreateWindow("Calendar", SDL_WINDOWPOS_CENTERED,
-                                  SDL_WINDOWPOS_CENTERED, state.w, state.h,
-                                  SDL_WINDOW_RESIZABLE);
-  if (state.window == NULL) {
+  SDL_Window *window = SDL_CreateWindow("Calendar", SDL_WINDOWPOS_CENTERED,
+                                        SDL_WINDOWPOS_CENTERED, state.w,
+                                        state.h, SDL_WINDOW_RESIZABLE);
+  if (window == NULL) {
     SDL_Log("Failed to create window: %s\n", SDL_GetError());
     return 1;
   }
 
-  state.renderer =
-      SDL_CreateRenderer(state.window, -1, SDL_RENDERER_ACCELERATED);
+  state.renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
   if (state.renderer == NULL) {
     SDL_Log("Failed to create renderer: %s\n", SDL_GetError());
     return 1;
@@ -303,7 +319,7 @@ int main(void) {
     return 1;
   }
 
-  while (state.running) {
+  while (state.is_running) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
       SDL_Log("event: %d\n", e.type);
@@ -344,7 +360,7 @@ int main(void) {
     SDL_SetRenderDrawColor(state.renderer, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b,
                            BG_COLOR.a);
     SDL_RenderClear(state.renderer);
-    SDL_GetWindowSize(state.window, &state.w, &state.h);
+    SDL_GetWindowSize(window, &state.w, &state.h);
 
     SDL_Rect r = {
         .x = 50,
@@ -360,7 +376,7 @@ int main(void) {
 
   SDL_Log("Exit calendar\n");
   SDL_DestroyRenderer(state.renderer);
-  SDL_DestroyWindow(state.window);
+  SDL_DestroyWindow(window);
   SDL_Quit();
 
   return 0;
