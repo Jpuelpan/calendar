@@ -277,11 +277,11 @@ void UpdateMonth(AppState *state, int count) {
 
 void SetMonthToday(AppState *state) {
   state->current_month->tm_mon = state->today->tm_mon;
-  state->current_month->tm_mday = state->today->tm_mday;
   state->current_month->tm_year = state->today->tm_year;
-
   mktime(state->current_month);
-  mktime(state->today);
+
+  LogDate("TODAY", state->today);
+  LogDate("MONTH", state->current_month);
 }
 
 int main(void) {
