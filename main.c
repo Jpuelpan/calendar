@@ -145,6 +145,11 @@ void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect) {
 
 void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
                       SDL_Texture *texture) {
+
+  if (texture == NULL) {
+    return;
+  }
+
   int padding_x = rect->w / 3;
   int padding_y = rect->h / 2;
 
@@ -165,7 +170,9 @@ void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
       .h = FONT_HEIGHT + FONT_DESCENT + 3,
   };
 
-  SDL_RenderCopy(renderer, texture, &srcRect, &destRect);
+  if (SDL_RenderCopy(renderer, texture, &srcRect, &destRect) < 0) {
+    SDL_Log("Failed to render texture: %s\n", SDL_GetError());
+  }
 }
 
 void RenderMonth(AppState *state, SDL_Rect *root_rect) {
@@ -213,17 +220,17 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
           .h = column_height,
       };
 
+      if (day == state->today->tm_mday &&
+          state->current_month->tm_mon == state->today->tm_mon &&
+          state->current_month->tm_year == state->today->tm_year) {
+        RenderBoundingBox(state->renderer, &r);
+      }
+
       if (i == 0 && j < offset) {
         RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[0]);
       } else if (day <= state->total_days) {
         RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[day]);
         day++;
-      }
-
-      if (day == state->today->tm_mday &&
-          state->current_month->tm_mon == state->today->tm_mon &&
-          state->current_month->tm_year == state->today->tm_year) {
-        RenderBoundingBox(state->renderer, &r);
       }
     }
   }
