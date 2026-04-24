@@ -322,18 +322,16 @@ int main(void) {
           break;
 
         case SDLK_h:
-        case SDLK_k:
         case SDLK_LEFT:
           UpdateMonth(&state, -1);
           break;
 
         case SDLK_l:
-        case SDLK_j:
         case SDLK_RIGHT:
           UpdateMonth(&state, 1);
           break;
 
-        case SDLK_t:
+        case SDLK_SPACE:
           SetMonthToday(&state);
           break;
         }
