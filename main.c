@@ -213,7 +213,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
   int day = 1;
   for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 7; j++) {
-      if ((i == 0 && j < offset) || day >= state->total_days) {
+      if ((i == 0 && j < offset) || day > state->total_days) {
         continue;
       }
 
