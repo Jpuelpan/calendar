@@ -210,13 +210,18 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
           .w = column_width,
           .h = column_height,
       };
-      /* RenderBoundingBox(state->renderer, &r); */
 
       if (i == 0 && j < offset) {
         RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[0]);
       } else if (day <= state->total_days) {
         RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[day]);
         day++;
+      }
+
+      if (day == state->today->tm_mday &&
+          state->current_month->tm_mon == state->today->tm_mon &&
+          state->current_month->tm_year == state->today->tm_year) {
+        RenderBoundingBox(state->renderer, &r);
       }
     }
   }
