@@ -22,16 +22,10 @@ typedef struct {
   struct tm *today;
   struct tm *current_month;
   int total_days;
-
-  bool is_running;
   bool is_fullscreen;
 
   SDL_Renderer *renderer;
-  int w;
-  int h;
 } AppState;
-
-void CloseApp(AppState *state) { state->is_running = false; }
 
 bool LoadFont(void *buff, char *font_name, size_t buff_size) {
   FcConfig *config = NULL;
@@ -290,6 +284,25 @@ void SetMonthToday(AppState *state) {
   LogDate("MONTH", state->current_month);
 }
 
+void RenderApp(AppState *state, SDL_Window *window) {
+  SDL_RenderSetScale(state->renderer, 1.0f, 1.0f);
+  SDL_SetRenderDrawColor(state->renderer, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b,
+                         BG_COLOR.a);
+  SDL_RenderClear(state->renderer);
+
+  int w, h = 0;
+  SDL_GetWindowSize(window, &w, &h);
+
+  SDL_Rect r = {
+      .x = 50,
+      .y = 50,
+      .w = w - 100,
+      .h = h - 100,
+  };
+  RenderMonth(state, &r);
+  SDL_RenderPresent(state->renderer);
+}
+
 int main(void) {
   SDL_Log("Initializing calendar\n");
   time_t today_timer = time(NULL);
@@ -306,12 +319,9 @@ int main(void) {
   month_tm.tm_hour = 0;
 
   AppState state = {
-      .is_running = true,
       .is_fullscreen = false,
       .today = &today_tm,
       .current_month = &month_tm,
-      .w = 600,
-      .h = 600,
   };
 
   UpdateMonth(&state, 0);
@@ -321,9 +331,9 @@ int main(void) {
     return 1;
   }
 
-  SDL_Window *window = SDL_CreateWindow("Calendar", SDL_WINDOWPOS_CENTERED,
-                                        SDL_WINDOWPOS_CENTERED, state.w,
-                                        state.h, SDL_WINDOW_RESIZABLE);
+  SDL_Window *window =
+      SDL_CreateWindow("Calendar", SDL_WINDOWPOS_CENTERED,
+                       SDL_WINDOWPOS_CENTERED, 600, 600, SDL_WINDOW_RESIZABLE);
   if (window == NULL) {
     SDL_Log("Failed to create window: %s\n", SDL_GetError());
     return 1;
@@ -340,65 +350,50 @@ int main(void) {
     return 1;
   }
 
-  while (state.is_running) {
-    SDL_Event e;
-    while (SDL_PollEvent(&e)) {
-      SDL_Log("event: %d\n", e.type);
+  bool is_running = true;
+  RenderApp(&state, window);
 
-      switch (e.type) {
-      case SDL_QUIT:
-        CloseApp(&state);
+  SDL_Event e;
+  while (SDL_WaitEvent(&e) && is_running) {
+    SDL_Log("event: %d\n", e.type);
+
+    switch (e.type) {
+    case SDL_QUIT:
+      is_running = false;
+      break;
+
+    case SDL_KEYDOWN:
+      switch (e.key.keysym.sym) {
+      case SDLK_ESCAPE:
+      case SDLK_q:
+        is_running = false;
         break;
 
-      case SDL_KEYDOWN:
+      case SDLK_f:
+        state.is_fullscreen = !state.is_fullscreen;
+        SDL_SetWindowFullscreen(
+            window, state.is_fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
+        break;
 
-        switch (e.key.keysym.sym) {
-        case SDLK_ESCAPE:
-        case SDLK_q:
-          CloseApp(&state);
-          break;
+      case SDLK_h:
+      case SDLK_LEFT:
+        UpdateMonth(&state, -1);
+        break;
 
-        case SDLK_f:
-          state.is_fullscreen = !state.is_fullscreen;
-          SDL_SetWindowFullscreen(
-              window, state.is_fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
-          break;
+      case SDLK_l:
+      case SDLK_RIGHT:
+        UpdateMonth(&state, 1);
+        break;
 
-        case SDLK_h:
-        case SDLK_LEFT:
-          UpdateMonth(&state, -1);
-          break;
-
-        case SDLK_l:
-        case SDLK_RIGHT:
-          UpdateMonth(&state, 1);
-          break;
-
-        case SDLK_SPACE:
-          SetMonthToday(&state);
-          break;
-        }
-
+      case SDLK_SPACE:
+        SetMonthToday(&state);
         break;
       }
+
+      break;
     }
 
-    SDL_RenderSetScale(state.renderer, 1.0f, 1.0f);
-    SDL_SetRenderDrawColor(state.renderer, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b,
-                           BG_COLOR.a);
-    SDL_RenderClear(state.renderer);
-    SDL_GetWindowSize(window, &state.w, &state.h);
-
-    SDL_Rect r = {
-        .x = 50,
-        .y = 50,
-        .w = state.w - 100,
-        .h = state.h - 100,
-    };
-    RenderMonth(&state, &r);
-
-    SDL_RenderPresent(state.renderer);
-    SDL_Delay(10);
+    RenderApp(&state, window);
   }
 
   SDL_Log("Exit calendar\n");
