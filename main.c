@@ -24,6 +24,8 @@ typedef struct {
   int total_days;
 
   bool is_running;
+  bool is_fullscreen;
+
   SDL_Renderer *renderer;
   int w;
   int h;
@@ -292,6 +294,7 @@ int main(void) {
 
   AppState state = {
       .is_running = true,
+      .is_fullscreen = false,
       .today = &today_tm,
       .current_month = &month_tm,
       .w = 600,
@@ -340,6 +343,12 @@ int main(void) {
         case SDLK_ESCAPE:
         case SDLK_q:
           CloseApp(&state);
+          break;
+
+        case SDLK_f:
+          state.is_fullscreen = !state.is_fullscreen;
+          SDL_SetWindowFullscreen(
+              window, state.is_fullscreen ? SDL_WINDOW_FULLSCREEN : 0);
           break;
 
         case SDLK_h:
