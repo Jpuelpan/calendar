@@ -213,6 +213,10 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
   int day = 1;
   for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 7; j++) {
+      if ((i == 0 && j < offset) || day >= state->total_days) {
+        continue;
+      }
+
       SDL_Rect r = {
           .x = root_rect->x + column_width * j,
           .y = root_rect->y + title_height + header_height + column_height * i,
@@ -220,18 +224,20 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
           .h = column_height,
       };
 
+      SDL_Texture *texture = NUMBER_TEXTURES[day];
+      SDL_SetTextureColorMod(texture, FG_COLOR.r, FG_COLOR.g, FG_COLOR.b);
+
       if (day == state->today->tm_mday &&
           state->current_month->tm_mon == state->today->tm_mon &&
           state->current_month->tm_year == state->today->tm_year) {
-        RenderBoundingBox(state->renderer, &r);
+        SDL_SetRenderDrawColor(state->renderer, FG_COLOR.r, FG_COLOR.g,
+                               FG_COLOR.b, FG_COLOR.a);
+        SDL_RenderFillRect(state->renderer, &r);
+        SDL_SetTextureColorMod(texture, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b);
       }
 
-      if (i == 0 && j < offset) {
-        RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[0]);
-      } else if (day <= state->total_days) {
-        RenderBoxTexture(state->renderer, &r, NUMBER_TEXTURES[day]);
-        day++;
-      }
+      RenderBoxTexture(state->renderer, &r, texture);
+      day++;
     }
   }
 }
