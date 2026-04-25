@@ -69,9 +69,9 @@ bool LoadFont(void *buff, char *font_name, size_t buff_size) {
   return true;
 }
 
-int LoadTextures(SDL_Renderer *renderer) {
+int InitTextures(SDL_Renderer *renderer, char *font_name) {
   char font_path[500];
-  if (!LoadFont(&font_path, NULL, sizeof(font_path))) {
+  if (!LoadFont(&font_path, font_name, sizeof(font_path))) {
     SDL_Log("Failed to load font\n");
     return 1;
   }
@@ -88,6 +88,9 @@ int LoadTextures(SDL_Renderer *renderer) {
   }
   FONT_DESCENT = TTF_FontDescent(font);
   FONT_HEIGHT = TTF_FontHeight(font);
+
+  SDL_Log("Font Height: %d\n", FONT_HEIGHT);
+  SDL_Log("Font Descent: %d\n", FONT_DESCENT);
 
   for (int i = 1; i <= 31; i++) {
     char content[10];
@@ -185,7 +188,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
 
   RenderBoxTexture(state->renderer, &title_rect,
                    MONTH_TEXTURES[state->current_month->tm_mon]);
-  /* RenderBoundingBox(state->renderer, &title_rect); */
+  // RenderBoundingBox(state->renderer, &title_rect);
 
   // Render header with week day names
   for (size_t i = 0; i < sizeof(WEEKDAY_NAMES) / sizeof(WEEKDAY_NAMES[0]);
@@ -197,7 +200,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
         .h = header_height,
     };
     RenderBoxTexture(state->renderer, &r, WEEKDAY_TEXTURES[i]);
-    /* RenderBoundingBox(state->renderer, &r); */
+    // RenderBoundingBox(state->renderer, &r);
   }
 
   // Render actual calendar
@@ -303,8 +306,16 @@ void RenderApp(AppState *state, SDL_Window *window) {
   SDL_RenderPresent(state->renderer);
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
   SDL_Log("Initializing calendar\n");
+
+  char font_name[512];
+  for (int i = 0; i < argc; i++) {
+    if (strcmp(argv[i], "-font") == 0) {
+      memcpy(font_name, argv[i + 1], sizeof(font_name));
+    }
+  }
+
   time_t today_timer = time(NULL);
   time_t month_timer = time(NULL);
   struct tm today_tm;
@@ -345,7 +356,7 @@ int main(void) {
     return 1;
   }
 
-  if (LoadTextures(state.renderer) != 0) {
+  if (InitTextures(state.renderer, font_name) != 0) {
     SDL_Log("Failed to load textures\n");
     return 1;
   }
