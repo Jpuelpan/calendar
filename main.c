@@ -27,6 +27,56 @@ typedef struct {
   SDL_Renderer *renderer;
 } AppState;
 
+float min(float a, float b) { return a < b ? a : b; }
+
+void LogDate(char *msg, struct tm *tm) {
+  SDL_Log("%s: %d - %d - %d [%d]\n", msg, tm->tm_year + 1900, tm->tm_mon,
+          tm->tm_mday, tm->tm_wday);
+}
+
+void UpdateMonth(AppState *state, int count) {
+  int next_month = state->current_month->tm_mon + count;
+  int next_year = state->current_month->tm_year;
+
+  if (next_month < 0) {
+    next_month = 11;
+    next_year = state->current_month->tm_year - 1;
+  } else if (next_month > 11) {
+    next_month = 0;
+    next_year = state->current_month->tm_year + 1;
+  }
+
+  state->current_month->tm_mon = next_month;
+  state->current_month->tm_year = next_year;
+  mktime(state->current_month);
+
+  int year = state->current_month->tm_year;
+  int month = state->current_month->tm_mon + 1;
+
+  if (month == 2) {
+    state->total_days = 28;
+    if (year % 4 == 0) {
+      if (year % 100 != 0 || (year % 400) == 0) {
+        state->total_days++;
+      }
+    }
+  } else {
+    state->total_days = 30 + ((month + (month / 8)) % 2);
+  }
+
+  LogDate("TODAY", state->today);
+  LogDate("MONTH", state->current_month);
+}
+
+void SetMonthToday(AppState *state) {
+  state->current_month->tm_mon = state->today->tm_mon;
+  state->current_month->tm_year = state->today->tm_year;
+  mktime(state->current_month);
+
+  LogDate("TODAY", state->today);
+  LogDate("MONTH", state->current_month);
+}
+
 bool LoadFont(void *buff, char *font_name, size_t buff_size) {
   FcConfig *config = NULL;
 
@@ -94,7 +144,7 @@ int InitTextures(SDL_Renderer *renderer, char *font_name) {
 
   for (int i = 1; i <= 31; i++) {
     char content[10];
-    sprintf(content, "%02d", i);
+    sprintf(content, "%d", i);
 
     SDL_Surface *text = TTF_RenderText_Blended(font, content, FG_COLOR);
     if (!text) {
@@ -142,15 +192,13 @@ void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect) {
 
 void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
                       SDL_Texture *texture) {
-
   if (texture == NULL) {
     return;
   }
 
   int padding_x = rect->w / 3;
-  int padding_y = rect->h / 2;
-
-  SDL_Rect dest = {
+  int padding_y = rect->h / 3;
+  SDL_Rect inner_rect = {
       .x = rect->x + padding_x / 2,
       .y = rect->y + padding_y / 2,
       .w = rect->w - padding_x,
@@ -158,21 +206,26 @@ void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
   };
 
   int texture_width = 0;
-  SDL_QueryTexture(texture, NULL, NULL, &texture_width, NULL);
+  int texture_height = 0;
+  SDL_QueryTexture(texture, NULL, NULL, &texture_width, &texture_height);
 
-  SDL_Rect srcRect = {
-      .x = 0,
-      .y = 0,
-      .w = texture_width,
-      .h = FONT_HEIGHT + FONT_DESCENT + 3,
+  float k = min((float)inner_rect.w / (float)texture_width,
+                (float)inner_rect.h / (float)texture_height);
+
+  float dest_width = texture_width * k;
+  float dest_height = texture_height * k;
+
+  SDL_Rect dest = {
+      .x = inner_rect.x + ((float)inner_rect.w / 2) - (dest_width / 2),
+      .y = inner_rect.y + ((float)inner_rect.h / 2) - (dest_height / 2),
+      .w = dest_width,
+      .h = dest_height,
   };
 
-  if (SDL_RenderCopy(renderer, texture, &srcRect, &dest) < 0) {
+  if (SDL_RenderCopy(renderer, texture, NULL, &dest) < 0) {
     SDL_Log("Failed to render texture: %s\n", SDL_GetError());
   }
 }
-
-float min(float a, float b) { return a < b ? a : b; }
 
 void RenderMonthTitle(AppState *state, SDL_Rect *rect) {
   SDL_Texture *texture = MONTH_TEXTURES[state->current_month->tm_mon];
@@ -196,9 +249,6 @@ void RenderMonthTitle(AppState *state, SDL_Rect *rect) {
   if (SDL_RenderCopy(state->renderer, texture, NULL, &dest) < 0) {
     SDL_Log("Failed to render texture: %s\n", SDL_GetError());
   }
-
-  // RenderBoundingBox(state->renderer, rect);
-  // RenderBoundingBox(state->renderer, &dest);
 }
 
 void RenderMonth(AppState *state, SDL_Rect *root_rect) {
@@ -264,54 +314,6 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
       day++;
     }
   }
-}
-
-void LogDate(char *msg, struct tm *tm) {
-  SDL_Log("%s: %d - %d - %d [%d]\n", msg, tm->tm_year + 1900, tm->tm_mon,
-          tm->tm_mday, tm->tm_wday);
-}
-
-void UpdateMonth(AppState *state, int count) {
-  int next_month = state->current_month->tm_mon + count;
-  int next_year = state->current_month->tm_year;
-
-  if (next_month < 0) {
-    next_month = 11;
-    next_year = state->current_month->tm_year - 1;
-  } else if (next_month > 11) {
-    next_month = 0;
-    next_year = state->current_month->tm_year + 1;
-  }
-
-  state->current_month->tm_mon = next_month;
-  state->current_month->tm_year = next_year;
-  mktime(state->current_month);
-
-  int year = state->current_month->tm_year;
-  int month = state->current_month->tm_mon + 1;
-
-  if (month == 2) {
-    state->total_days = 28;
-    if (year % 4 == 0) {
-      if (year % 100 != 0 || (year % 400) == 0) {
-        state->total_days++;
-      }
-    }
-  } else {
-    state->total_days = 30 + ((month + (month / 8)) % 2);
-  }
-
-  LogDate("TODAY", state->today);
-  LogDate("MONTH", state->current_month);
-}
-
-void SetMonthToday(AppState *state) {
-  state->current_month->tm_mon = state->today->tm_mon;
-  state->current_month->tm_year = state->today->tm_year;
-  mktime(state->current_month);
-
-  LogDate("TODAY", state->today);
-  LogDate("MONTH", state->current_month);
 }
 
 void RenderApp(AppState *state, SDL_Window *window) {
