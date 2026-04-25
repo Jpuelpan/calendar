@@ -309,7 +309,7 @@ void RenderApp(AppState *state, SDL_Window *window) {
 int main(int argc, char *argv[]) {
   SDL_Log("Initializing calendar\n");
 
-  char font_name[512];
+  char font_name[512] = {'\0'};
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "-font") == 0) {
       memcpy(font_name, argv[i + 1], sizeof(font_name));
