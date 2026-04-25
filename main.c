@@ -150,7 +150,7 @@ void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
   int padding_x = rect->w / 3;
   int padding_y = rect->h / 2;
 
-  SDL_Rect destRect = {
+  SDL_Rect dest = {
       .x = rect->x + padding_x / 2,
       .y = rect->y + padding_y / 2,
       .w = rect->w - padding_x,
@@ -167,9 +167,38 @@ void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
       .h = FONT_HEIGHT + FONT_DESCENT + 3,
   };
 
-  if (SDL_RenderCopy(renderer, texture, &srcRect, &destRect) < 0) {
+  if (SDL_RenderCopy(renderer, texture, &srcRect, &dest) < 0) {
     SDL_Log("Failed to render texture: %s\n", SDL_GetError());
   }
+}
+
+float min(float a, float b) { return a < b ? a : b; }
+
+void RenderMonthTitle(AppState *state, SDL_Rect *rect) {
+  SDL_Texture *texture = MONTH_TEXTURES[state->current_month->tm_mon];
+
+  int texture_width = 0;
+  int texture_height = 0;
+  SDL_QueryTexture(texture, NULL, NULL, &texture_width, &texture_height);
+
+  float k = min((float)rect->w / (float)texture_width,
+                (float)rect->h / (float)texture_height);
+
+  float new_width = texture_width * k;
+
+  SDL_Rect dest = {
+      .x = rect->x + ((float)rect->w / 2) - (new_width / 2),
+      .y = rect->y,
+      .w = new_width,
+      .h = texture_height * k,
+  };
+
+  if (SDL_RenderCopy(state->renderer, texture, NULL, &dest) < 0) {
+    SDL_Log("Failed to render texture: %s\n", SDL_GetError());
+  }
+
+  // RenderBoundingBox(state->renderer, rect);
+  // RenderBoundingBox(state->renderer, &dest);
 }
 
 void RenderMonth(AppState *state, SDL_Rect *root_rect) {
@@ -186,9 +215,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
       .h = title_height,
   };
 
-  RenderBoxTexture(state->renderer, &title_rect,
-                   MONTH_TEXTURES[state->current_month->tm_mon]);
-  // RenderBoundingBox(state->renderer, &title_rect);
+  RenderMonthTitle(state, &title_rect);
 
   // Render header with week day names
   for (size_t i = 0; i < sizeof(WEEKDAY_NAMES) / sizeof(WEEKDAY_NAMES[0]);
@@ -296,11 +323,14 @@ void RenderApp(AppState *state, SDL_Window *window) {
   int w, h = 0;
   SDL_GetWindowSize(window, &w, &h);
 
+  int pad_x = w / 15;
+  int pad_y = h / 15;
+
   SDL_Rect r = {
-      .x = 50,
-      .y = 50,
-      .w = w - 100,
-      .h = h - 100,
+      .x = pad_x,
+      .y = pad_x,
+      .w = w - (pad_x * 2),
+      .h = h - (pad_y * 2),
   };
   RenderMonth(state, &r);
   SDL_RenderPresent(state->renderer);
@@ -366,7 +396,7 @@ int main(int argc, char *argv[]) {
 
   SDL_Event e;
   while (SDL_WaitEvent(&e) && is_running) {
-    SDL_Log("event: %d\n", e.type);
+    // SDL_Log("event: %d\n", e.type);
 
     switch (e.type) {
     case SDL_QUIT:
