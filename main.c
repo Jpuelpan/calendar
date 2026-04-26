@@ -144,7 +144,7 @@ int InitTextures(SDL_Renderer *renderer, char *font_name) {
 
   for (int i = 1; i <= 31; i++) {
     char content[10];
-    sprintf(content, "%d", i);
+    sprintf(content, "%02d", i);
 
     SDL_Surface *text = TTF_RenderText_Blended(font, content, FG_COLOR);
     if (!text) {
