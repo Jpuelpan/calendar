@@ -1,12 +1,11 @@
-CFLAGS = -Wall -Wextra -Wpedantic -std=c99 -g
+CC = gcc
+CFLAGS = -Wall -Wextra -Wpedantic -std=c99 `pkg-config --cflags --libs sdl2 SDL2_ttf fontconfig`
 
-default: build run
+build: main.c
+	$(CC) $(CFLAGS) -g -o calendar main.c
 
 clean:
 	rm ./calendar
 
-build:
-	gcc -o calendar main.c `pkg-config --cflags --libs sdl2 SDL2_ttf fontconfig` $(CFLAGS) 
-
-run:
+run: build
 	./calendar
