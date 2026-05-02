@@ -552,6 +552,14 @@ int main(int argc, char *argv[]) {
       is_running = false;
       break;
 
+    case SDL_MOUSEWHEEL:
+      if (e.wheel.y > 0) {
+        UpdateMonth(&state, 1);
+      } else {
+        UpdateMonth(&state, -1);
+      }
+      break;
+
     case SDL_KEYDOWN:
       switch (e.key.keysym.sym) {
       case SDLK_ESCAPE:
