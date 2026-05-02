@@ -3,6 +3,7 @@
 #include <fontconfig/fontconfig.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 SDL_Color BG_COLOR = {.r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE};
@@ -14,6 +15,7 @@ const char *MONTH_NAMES[] = {"January",   "February", "March",    "April",
 
 int FONT_HEIGHT = 0;
 int FONT_DESCENT = 0;
+SDL_Texture *SINGLE_NUMBER_TEXTURES[10];
 SDL_Texture *NUMBER_TEXTURES[31];
 SDL_Texture *WEEKDAY_TEXTURES[7];
 SDL_Texture *MONTH_TEXTURES[12];
@@ -84,12 +86,14 @@ bool LoadFont(void *buff, char *font_name, size_t buff_size) {
     SDL_Log("Failed to initialize FontConfig\n");
     return false;
   }
+  SDL_Log("Initialized FontConfig\n");
 
   config = FcInitLoadConfigAndFonts();
   if (config == NULL) {
     SDL_Log("Failed to load FontConfig configuration\n");
     return false;
   }
+  SDL_Log("Initialized FontConfig configuration and fonts\n");
 
   if (font_name == NULL || strlen(font_name) == 0) {
     font_name = "Mono:style=Regular";
@@ -156,6 +160,21 @@ int InitTextures(SDL_Renderer *renderer, char *font_name) {
     SDL_FreeSurface(text);
   }
 
+  for (int i = 0; i < 10; i++) {
+    char digit[2];
+    digit[0] = 48 + i;
+    digit[1] = '\0';
+
+    SDL_Surface *text = TTF_RenderText_Blended(font, digit, FG_COLOR);
+    if (!text) {
+      SDL_Log("Failed to texturize number: %s\n", TTF_GetError());
+      return 1;
+    }
+
+    SINGLE_NUMBER_TEXTURES[i] = SDL_CreateTextureFromSurface(renderer, text);
+    SDL_FreeSurface(text);
+  }
+
   for (int i = 0; i < (int)(sizeof(WEEKDAY_NAMES) / sizeof(WEEKDAY_NAMES[0]));
        i++) {
     SDL_Surface *text =
@@ -184,14 +203,20 @@ int InitTextures(SDL_Renderer *renderer, char *font_name) {
   return 0;
 }
 
-void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect) {
-  SDL_SetRenderDrawColor(renderer, FG_COLOR.r, FG_COLOR.g, FG_COLOR.b,
-                         FG_COLOR.a);
+void RenderBoundingBox(SDL_Renderer *renderer, SDL_Rect *rect,
+                       SDL_Color *color) {
+  if (color == NULL) {
+    SDL_SetRenderDrawColor(renderer, FG_COLOR.r, FG_COLOR.g, FG_COLOR.b,
+                           FG_COLOR.a);
+  } else {
+    SDL_SetRenderDrawColor(renderer, color->r, color->g, color->b, color->a);
+  }
+
   SDL_RenderDrawRect(renderer, rect);
 }
 
-void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
-                      SDL_Texture *texture) {
+void RenderWeekName(SDL_Renderer *renderer, SDL_Rect *rect, int week_day) {
+  SDL_Texture *texture = WEEKDAY_TEXTURES[week_day];
   if (texture == NULL) {
     return;
   }
@@ -227,28 +252,147 @@ void RenderBoxTexture(SDL_Renderer *renderer, SDL_Rect *rect,
   }
 }
 
-void RenderMonthTitle(AppState *state, SDL_Rect *rect) {
-  SDL_Texture *texture = MONTH_TEXTURES[state->current_month->tm_mon];
+void RenderDayNumber(SDL_Renderer *renderer, SDL_Rect *rect, int day_number) {
+  SDL_Texture *texture = NUMBER_TEXTURES[day_number];
+  if (texture == NULL) {
+    return;
+  }
+
+  int padding_x = rect->w / 3;
+  int padding_y = rect->h / 3;
+  SDL_Rect inner_rect = {
+      .x = rect->x + padding_x / 2,
+      .y = rect->y + padding_y / 2,
+      .w = rect->w - padding_x,
+      .h = rect->h - padding_y,
+  };
 
   int texture_width = 0;
   int texture_height = 0;
   SDL_QueryTexture(texture, NULL, NULL, &texture_width, &texture_height);
 
-  float k = min((float)rect->w / (float)texture_width,
-                (float)rect->h / (float)texture_height);
+  float k = min((float)inner_rect.w / (float)texture_width,
+                (float)inner_rect.h / (float)texture_height);
 
-  float new_width = texture_width * k;
+  float dest_width = texture_width * k;
+  float dest_height = texture_height * k;
 
   SDL_Rect dest = {
-      .x = rect->x + ((float)rect->w / 2) - (new_width / 2),
-      .y = rect->y,
-      .w = new_width,
-      .h = texture_height * k,
+      .x = inner_rect.x + ((float)inner_rect.w / 2) - (dest_width / 2),
+      .y = inner_rect.y + ((float)inner_rect.h / 2) - (dest_height / 2),
+      .w = dest_width,
+      .h = dest_height,
   };
 
-  if (SDL_RenderCopy(state->renderer, texture, NULL, &dest) < 0) {
+  if (SDL_RenderCopy(renderer, texture, NULL, &dest) < 0) {
     SDL_Log("Failed to render texture: %s\n", SDL_GetError());
   }
+}
+
+SDL_Texture *GetYearTexture(SDL_Renderer *renderer, int year) {
+  char str_year[12];
+  sprintf(str_year, "%d", year);
+  int year_len = (int)strlen(str_year);
+
+  SDL_Texture *digit_textures[year_len];
+  int digit_height = 0;
+  int digit_width = 0;
+
+  for (int i = 0; i < year_len; i++) {
+    int idx = str_year[i] - 48;
+    digit_textures[i] = SINGLE_NUMBER_TEXTURES[idx];
+
+    int w = 0, h = 0;
+    SDL_QueryTexture(digit_textures[i], NULL, NULL, &w, &h);
+    digit_height = h;
+    digit_width = w;
+  }
+  int full_width = digit_width * year_len;
+
+  SDL_Texture *target_texture =
+      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB32,
+                        SDL_TEXTUREACCESS_TARGET, full_width, digit_height);
+
+  if (!target_texture) {
+    SDL_Log("Failed to creat texture: %s\n", SDL_GetError());
+    return NULL;
+  }
+
+  SDL_SetRenderTarget(renderer, target_texture);
+  SDL_SetRenderDrawColor(renderer, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b,
+                         BG_COLOR.a);
+  SDL_RenderClear(renderer);
+  for (int i = 0; i < year_len; i++) {
+    SDL_Rect dest = {
+        .x = digit_width * i,
+        .y = 0,
+        .w = digit_width,
+        .h = digit_height,
+    };
+
+    if (SDL_RenderCopy(renderer, digit_textures[i], NULL, &dest) < 0) {
+      SDL_Log("Failed to render texture: %s\n", SDL_GetError());
+    }
+  }
+
+  SDL_SetRenderTarget(renderer, NULL);
+  return target_texture;
+}
+
+void RenderMonthTitle(AppState *state, SDL_Rect *rect) {
+  SDL_Texture *month_texture = MONTH_TEXTURES[state->current_month->tm_mon];
+  int month_width = 0;
+  int month_height = 0;
+  SDL_QueryTexture(month_texture, NULL, NULL, &month_width, &month_height);
+
+  SDL_Texture *year_texture =
+      GetYearTexture(state->renderer, state->current_month->tm_year + 1900);
+  int year_width = 0;
+  int year_height = 0;
+  SDL_QueryTexture(year_texture, NULL, NULL, &year_width, &year_height);
+
+  int spacing = year_width / 4;
+  int target_width = month_width + year_width + spacing;
+  int target_height = month_height;
+  SDL_Texture *target_texture =
+      SDL_CreateTexture(state->renderer, SDL_PIXELFORMAT_ARGB32,
+                        SDL_TEXTUREACCESS_TARGET, target_width, target_height);
+
+  SDL_SetRenderTarget(state->renderer, target_texture);
+  SDL_SetRenderDrawColor(state->renderer, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b,
+                         BG_COLOR.a);
+  SDL_RenderClear(state->renderer);
+
+  SDL_Rect dest = {
+      .x = 0,
+      .y = 0,
+      .w = month_width,
+      .h = target_height,
+  };
+  if (SDL_RenderCopy(state->renderer, month_texture, NULL, &dest) < 0) {
+    SDL_Log("Failed to render month texture: %s\n", SDL_GetError());
+  }
+
+  dest.x = month_width + spacing;
+  dest.w = year_width;
+  if (SDL_RenderCopy(state->renderer, year_texture, NULL, &dest) < 0) {
+    SDL_Log("Failed to render month texture: %s\n", SDL_GetError());
+  }
+
+  float k = min((float)rect->w / (float)target_width,
+                (float)rect->h / (float)target_height);
+
+  float new_width = target_width * k;
+  dest.x = rect->x + ((float)rect->w / 2) - (new_width / 2);
+  dest.y = rect->y;
+  dest.w = new_width;
+  dest.h = target_height * k;
+
+  SDL_SetRenderTarget(state->renderer, NULL);
+  if (SDL_RenderCopy(state->renderer, target_texture, NULL, &dest) < 0) {
+    SDL_Log("Failed to render texture: %s\n", SDL_GetError());
+  }
+  // RenderBoundingBox(state->renderer, rect, NULL);
 }
 
 void RenderMonth(AppState *state, SDL_Rect *root_rect) {
@@ -276,8 +420,7 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
         .w = column_width,
         .h = header_height,
     };
-    RenderBoxTexture(state->renderer, &r, WEEKDAY_TEXTURES[i]);
-    // RenderBoundingBox(state->renderer, &r);
+    RenderWeekName(state->renderer, &r, i);
   }
 
   // Render actual calendar
@@ -310,7 +453,8 @@ void RenderMonth(AppState *state, SDL_Rect *root_rect) {
         SDL_SetTextureColorMod(texture, BG_COLOR.r, BG_COLOR.g, BG_COLOR.b);
       }
 
-      RenderBoxTexture(state->renderer, &r, texture);
+      // RenderBoundingBox(state->renderer, &r, NULL);
+      RenderDayNumber(state->renderer, &r, day);
       day++;
     }
   }
@@ -373,6 +517,7 @@ int main(int argc, char *argv[]) {
     SDL_Log("Failed to initialize SDL: %s\n", SDL_GetError());
     return 1;
   }
+  SDL_Log("Initialized SDL\n");
 
   SDL_Window *window =
       SDL_CreateWindow("Calendar", SDL_WINDOWPOS_CENTERED,
@@ -381,12 +526,14 @@ int main(int argc, char *argv[]) {
     SDL_Log("Failed to create window: %s\n", SDL_GetError());
     return 1;
   }
+  SDL_Log("Window initialized\n");
 
   state.renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
   if (state.renderer == NULL) {
     SDL_Log("Failed to create renderer: %s\n", SDL_GetError());
     return 1;
   }
+  SDL_Log("Renderer initialized\n");
 
   if (InitTextures(state.renderer, font_name) != 0) {
     SDL_Log("Failed to load textures\n");
